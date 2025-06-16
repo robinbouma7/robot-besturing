@@ -28,15 +28,16 @@ clawrotpossenshor = 0
 
 
 claw1 = 0
-claw1pos = 1
+claw1pos = -1
 claw2 = 0
-claw2pos = -1
+claw2pos = 1
+clawpos = -1
 
 def init(robot):
     """
     Initializes the robot's servos
     """
-    global discrot, armvert, armhor, clawrot, claw1, claw2, discrotpos, armvertpos, armhorpos, clawrothor, clawrotpossens, clawrotpossenshor
+    global discrot, armvert, armhor, clawrot, claw1, claw2, discrotpos, armvertpos, armhorpos, clawrothor, clawrotpossens, clawrotpossenshor, clawpos
     discrot = robot.getDevice("disc-rotate")
     discrotpos = robot.getDevice("discrot-pos")
     discrotpos.enable(50)  # Enable position sensor for disc rotation
@@ -47,13 +48,15 @@ def init(robot):
     armhorpos = robot.getDevice("armhor-pos")
     armhorpos.enable(50)  # Enable position sensor for arm horizontal
     clawrot = robot.getDevice("claw-rotate")
-    clawrotpos = robot.getDevice("claw-rotatepos")
-    clawrotpos.enable(50)  # Enable position sensor for claw rotation
+    clawrotpossens = robot.getDevice("claw-rotatepos")
+    clawrotpossens.enable(50)  # Enable position sensor for claw rotation
     clawrothor = robot.getDevice("claw-rotate-hor")
     clawrotpossenshor = robot.getDevice("claw-rotatepos-hor")
     clawrotpossenshor.enable(50)  # Enable position sensor for claw horizontal rotation
     claw1 = robot.getDevice("claw1")
     claw2 = robot.getDevice("claw2")
+    clawpos = robot.getDevice("claw-position")
+    clawpos.enable(50)  # Enable position sensor for claw tightness
 
 
 def Rotate(Rad, speed=1):
@@ -81,10 +84,19 @@ def StopRotate():
     rotation = discrotpos.getValue()  # Keep current position
     discrot.setPosition(rotation)  # Keep current position    
 
+def SetRotateSpeed(speed):
+    """
+    Sets the speed of the rotation
+    """
+    global discrot
+    discrot.setVelocity(speed)
+
+
 def ArmVertical(Dist, speed=1):
     """
     Moves the arm vertically by a given distance in m
     """
+    #TODO: cant go too far down when the claw is rotated vertically
     global vertdist, armvert
     vertdist += Dist
     armvert.setVelocity(speed)
@@ -106,8 +118,15 @@ def StopArmVertical():
     vertdist = armvertpos.getValue()  # Keep current position
     armvert.setPosition(vertdist)  # Keep current position
     
+def SetArmVerticalSpeed(speed):
+    """
+    Sets the speed of the vertical movement of the arm
+    """
+    global armvert
+    armvert.setVelocity(speed)
 
-def Armhorizontal(Dist, speed=1):
+
+def ArmHorizontal(Dist, speed=1):
     """
     Moves the arm horizontally by a given distance in m
     """
@@ -133,6 +152,13 @@ def StopArmHorizontal():
     hordist = armhorpos.getValue()  # Keep current position
     armhor.setPosition(hordist)  # Keep current position
     
+def SetArmHorizontalSpeed(speed):
+    """
+    Sets the speed of the horizontal movement of the arm
+    """
+    global armhor
+    armhor.setVelocity(speed)
+
 
 def RotateClawVertical(Rad, speed=1):
     """
@@ -147,10 +173,10 @@ def GetClawVertical():
     """
     Returns the current vertical position of the claw
     """
-    global clawrotpos, clawrotpossens
+    global clawrotpossens
     return clawrotpossens.getValue()  # Get current position from position sensor
 
-def stopClawVertical():
+def StopClawVertical():
     """
     Stops the vertical rotation of the claw
     """
@@ -158,6 +184,14 @@ def stopClawVertical():
     clawrot.setVelocity(0)
     clawrotpos = clawrotpossens.getValue()  # Keep current position
     clawrot.setPosition(clawrotpos)  # Keep current position
+    
+def SetClawVerticalSpeed(speed):
+    """
+    Sets the speed of the vertical rotation of the claw
+    """
+    global clawrot
+    clawrot.setVelocity(speed)
+
 
 def RotateClawHorizontal(Rad, speed=1):
     """
@@ -173,7 +207,7 @@ def GetClawHorizontal():
     """
     Returns the current horizontal position of the claw
     """
-    global clawrotposhor, clawrotpossenshor
+    global clawrotpossenshor
     return clawrotpossenshor.getValue()  # Get current position from position sensor
 
 def stopClawHorizontal():
@@ -185,17 +219,24 @@ def stopClawHorizontal():
     clawrotposhor = clawrotpossenshor.getValue()  # Keep current position
     clawrothor.setPosition(clawrotposhor)  # Keep current position
 
+def SetClawHorizontalSpeed(speed):
+    """
+    Sets the speed of the horizontal rotation of the claw
+    """
+    global clawrothor
+    clawrothor.setVelocity(speed)
+
 def TightenClaw(Rad, speed=1):
     """
     Tightens the claw by a given angle
     """
     global claw1pos, claw2pos, claw1, claw2
-    claw1pos -= Rad
-    claw2pos += Rad
-    if claw1pos < 0:
+    claw1pos += Rad
+    claw2pos -= Rad
+    if claw1pos > 0:
         print("claw1pos is too low, setting to 0")
         claw1pos = 0
-    if claw2pos > 0:
+    if claw2pos < 0:
         print("claw2pos is too high, setting to 0")
         claw2pos = 0
     claw1.setVelocity(speed)
@@ -207,15 +248,16 @@ def GetClawTightness():
     """
     Returns the current tightness of the claw
     """
-    NotImplementedError("GetClawTightness is not implemented")
+    global clawpos
+    return clawpos.getValue()  # Assuming both claws are at the same position
 
 def OpenClaw(speed=1):
     """
     fully Opens the claw
     """
     global claw1pos, claw2pos, claw1, claw2
-    claw1pos = 1
-    claw2pos = -1
+    claw1pos = -1
+    claw2pos = 1
     claw1.setVelocity(speed)
     claw1.setPosition(claw1pos)
     claw2.setVelocity(speed)

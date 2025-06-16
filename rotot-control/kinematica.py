@@ -25,7 +25,7 @@ def MoveArmHorizontal(Dist, speed=1):
     """
     Moves the arm horizontally by a given distance
     """
-    Servos.Armhorizontal(Dist, speed)
+    Servos.ArmHorizontal(Dist, speed)
 
 def Rotate(Rad, speed=1):
     """
