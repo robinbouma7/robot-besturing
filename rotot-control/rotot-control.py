@@ -300,7 +300,92 @@ def advancedcontrolangle():
             while True:
                 robot.step(timestep)
 
+def stationarysidecontrol():
+    
+
+    imageMid = 320
+    leftmargin = 100
+    rightmargin = 10
+    vertoffset = 0
+    grabsize = 200
+    grabsizemargin = 15
+    startmovesize = 30
+    vertstartsize = 35
+    clawclosedist = 0.9
+    clawclosespeed = 1
+    rotatemult = -0.00005
+    rotatespeed = 1
+    verticalDistMult = -0.03
+    armmovementspeed = -0.002
+    armspeed = 1
+    yoffset = -100
+    vertspeed = 1
+
+    lockId = -1
+
+    recognised = camera.getRecognitionObjects()
+    #camera.getImage()
+    recCount = 0
+    recCount = len(recognised)
+    lookingforid = False
+
+
+    
+    #print("test2")
+    for data in recognised:
+        
+        if lockId == -1:
+            lookingforid = True
+            #no id set
+            lockId = data.getId()
+        elif lookingforid:
+            if data.getId() > lockId:
+                #found a newer id
+                lockId = data.getId()
+
+    if lockId == -1 or recCount <= 0:
+        return
+    
+    grabbing = False
+
+    while not grabbing:
+        position = getposition(lockId)
+            
+        if position is None:
+            lockId = -1
+            continue 
+
+        if position[0] < imageMid - leftmargin or position[0] > imageMid + rightmargin:
+            control.Rotate((position[0] + leftmargin - imageMid) * rotatemult, rotatespeed)
+        else:
+            control.StopRotate()
+            
+        if position[1] < imageMid + yoffset - vertoffset and position[2] >= vertstartsize:
+            #omlaag
+            if control.GetArmVertical() < control.vertdist:
+                control.StopArmVertical()
+            control.ArmVertical((position[1] - imageMid + yoffset) * verticalDistMult, vertspeed)
+        elif position[1] > imageMid + yoffset + vertoffset and position[2] >= vertstartsize:
+            #omhoog
+            if control.GetArmVertical() > control.vertdist:
+                control.StopArmVertical()
+            control.ArmVertical((position[1] + vertoffset - imageMid + yoffset) * verticalDistMult, vertspeed)
+        else:
+            control.StopArmVertical()
+        
+        if position[2] >= grabsize - grabsizemargin and position[2] <= grabsize + grabsizemargin:
+            control.StopArmHorizontal()
+            control.TightenClaw(clawclosedist, clawclosespeed)
+            grabbing = True
+        elif position[0] >= imageMid - leftmargin and position[0] <= imageMid + rightmargin and position[2] >= startmovesize:
+            control.ArmHorizontal((position[2] - grabsize) * armmovementspeed, armspeed)
+
+        robot.step(timestep)
+    if lockId == -1:
+        return
+
 def advancedcontrol():
+
     #variables for logic
     lockId = -1
     position = [-1, -1, -1, -1]
@@ -342,6 +427,13 @@ def advancedcontrol():
 
     clawclosedist = 0.9
 
+    pityfactor = 20
+    pitycount = 0
+
+    lastlookedleft = True
+
+    searchrotate = 0.4
+
     #math constants
     checkdist = 0.02 # distance between the 2 positions after the check rotation
     camerafov = 1.13446 # 65 degrees in radians
@@ -381,9 +473,41 @@ def advancedcontrol():
             i += 1
 
         if lockId == -1 or recCount <= 0:
-            print("idlerotate")
-            control.Rotate(idlerotate)
+            if pitycount >= pityfactor:
+                #TODO: look on the sides
+                if control.GetRotation() == 0:
+                    #naar rechts
+                    control.Rotate(searchrotate, rotatespeed)
+                elif control.GetRotation() > 0:
+                    #naar links
+                    control.Rotate(-2 *searchrotate, rotatespeed)
+                elif control.GetRotation() < 0:
+                    #naar rechts
+                    control.Rotate(2 *searchrotate, rotatespeed)
+                
+                while control.rotation != control.GetRotation():
+                    robot.step(timestep)
+
+                if control.GetRotation() >= 0:
+                    control.RotateClawHorizontal(-1.5, 1)
+                else:
+                    control.RotateClawHorizontal(1.5, 1)
+
+                control.ArmHorizontal(0.2, 1)
+                while control.hordist != control.GetArmHorizontal() or control.clawrotposhor != control.GetClawHorizontal():
+                    robot.step(timestep)
+
+                recognised = camera.getRecognitionObjects()
+                #camera.getImage()
+                tempcount = len(recognised)
+                if tempcount <= 0:
+                    continue
+                stationarysidecontrol()
+
+            pitycount += 1
             continue
+
+        pitycount = 0
 
         print("found object with id: " + str(lockId))
         print("object type: " + str(recognised[tempint].getModel()))
@@ -416,7 +540,11 @@ def advancedcontrol():
         print("position2: " + str(position[1]))
         ypos = position[1]
         
-        control.Rotate(rotatecheckdist, rotatespeed)
+        if control.GetRotation() >= 0:
+            control.Rotate(rotatecheckdist, rotatespeed)
+        else:
+            control.Rotate(-rotatecheckdist, rotatespeed)
+
         #move to location
         while control.rotation != control.GetRotation():
             robot.step(timestep)
@@ -425,13 +553,21 @@ def advancedcontrol():
         if position is None:
             print("lost5")
             lockId = -1
-            continue  
-                
+            continue
+
+        print("position1: " + str(position[0]))
+        print("position2: " + str(position[1]))
+
         
 
         angle1 = 90
-        angle2 = 90 - math.degrees((position[0] - imageMid) * radialbypixel)
+        angle2 = 90 - math.degrees(abs((position[0] - imageMid)) * radialbypixel)
         angle3 = 180 - (angle1 + angle2)
+
+        print("angle1: " + str(angle1))
+        print("angle2: " + str(angle2))
+        print("angle3: " + str(angle3))
+
 
         yangle1 = math.degrees((ypos - imageMid) * radialbypixel)
         yangle2 = 90 - yangle1
@@ -444,12 +580,7 @@ def advancedcontrol():
         print("yangle1: " + str(yangle1))
         print("yangle2: " + str(yangle2))
 
-        print("angle1: " + str(angle1))
-        print("angle2: " + str(angle2))
-        print("angle3: " + str(angle3))
-
-        print("position1: " + str(position[0]))
-        print("position2: " + str(position[1]))
+        
 
         angle1rad = math.radians(angle1)
         angle2rad = math.radians(angle2)
@@ -470,9 +601,10 @@ def advancedcontrol():
         control.ArmVertical(-ydist, vertspeed)              
 
         #temprot = distance / math.sin(math.radians(90)) * math.sin(math.radians(90 - angle1 - angle3))
-        control.Rotate(-rotatecheckdist, rotatespeed)
-        control.RotateClawHorizontal(-control.clawrotposhor, 1)
-        
+        if control.GetRotation() <= 0:
+            control.Rotate(rotatecheckdist, rotatespeed)
+        else:
+            control.Rotate(-rotatecheckdist, rotatespeed)
 
         while control.armhorpos != control.GetArmHorizontal() and control.armvertpos != control.GetArmVertical() and control.rotation != control.GetRotation() and control.clawrotposhor != control.GetClawHorizontal():
             robot.step(timestep)
@@ -482,10 +614,27 @@ def advancedcontrol():
         while control.claw1pos != control.GetClawTightness():
             robot.step(timestep)
 
+        if control.GetRotation() >= -0.1 and control.GetRotation() <= 0.1:
+            #rotate claw horizontal
+            pass
+        elif control.GetRotation() >= 0.1:
+            control.RotateClawHorizontal(-clawyankdist, 10)
+        else:
+            control.RotateClawHorizontal(clawyankdist, 10)
+
+        while control.clawrotposhor != control.GetClawHorizontal():
+            robot.step(timestep) 
+
+        control.ArmHorizontal(-0.1, 1)
+
+        while control.hordist != control.GetArmHorizontal():
+            robot.step(timestep)
+
+        
         control.ArmHorizontal(traylocations[nexttraylocation][2] - control.GetArmHorizontal(), 0.2)
         control.Rotate(traylocations[nexttraylocation][0] - control.GetRotation(), 1)
         control.ArmVertical(traylocations[nexttraylocation][1] - control.GetArmVertical(), 1)
-        control.RotateClawHorizontal(clawyankdist, 1)
+        control.RotateClawHorizontal(-control.GetClawHorizontal(), 1)
 
         while control.hordist != control.GetArmHorizontal() or control.vertdist != control.GetArmVertical() or control.rotation != control.GetRotation():
             robot.step(timestep)
@@ -525,7 +674,7 @@ def movingcontrol():
     #rotation, armhor, armvert, clawhor
     traylocations = [
         [-1.5, 0, 0.2, 0],
-        [-1.5, 0.1, 0.2, 0]
+        [-1.5, 0.09999999, 0.2, 0]
     ]
     nexttraylocation = 0
 
@@ -550,8 +699,8 @@ def movingcontrol():
     vertmult = -0.0002
 
     armoffset = 0.02
-    armspeed = 0.25
-    armmovementspeed = -0.005
+    armspeed = 0.2
+    armmovementspeed = -0.002
     yoffset = -100
 
     clawclosedist = 1
@@ -649,7 +798,7 @@ def movingcontrol():
                 control.StopArmVertical()
             
             if position[2] >= grabsize - grabsizemargin and position[2] <= grabsize + grabsizemargin:
-                control.StopArmHorizontal()         
+                control.StopArmHorizontal()
                 control.TightenClaw(clawclosedist, clawclosespeed)
                 grabbing = True
             elif position[0] >= imageMid - leftmargin and position[0] <= imageMid + rightmargin and position[2] >= startmovesize:
@@ -736,7 +885,7 @@ def targetcontrol():
     #rotation, armhor, armvert
     lastrobotPosition = [-1, -1, -1]
     #rotation, armvert, armhor, clawhor, clawvert
-    startposition = [0.5, -0.03, 0.05, 0, 0.25]
+    startposition = [0.5, -0.03, 0.1, 0, 0.25]
 
     #calibration values
     idlerotate = 0.015
@@ -761,24 +910,21 @@ def targetcontrol():
     armoffset = 0.02
     armspeed = 0.25
     armmovementspeed = -0.005
-    yoffset = -100
+    yoffset = -200
 
     clawclosedist = 1
 
     clawyankdist = -0.5
 
-    leftmargin = 10
-    rightmargin = 100
+    leftmargin = 20
+    rightmargin = 125
     vertoffset = 0
 
     grabsize = 180
     grabsizemargin = 15
-    startmovesize = 40
-    vertstartsize = 70
+    startmovesize = 80
 
-    fullclawrot = 1.5708
-
-    armmax = 0.25
+    armmax = 0.2
 
     clawWiggleDist = 0.1
 
@@ -842,9 +988,11 @@ def targetcontrol():
         
         control.RotateClawVertical(0.25, 1)
         control.ArmHorizontal(0.1, 1)
+        Looping = True
         prikken = False
+        godown = True
 
-        while not prikken:
+        while Looping:
             position = getposition(lockId)
              
             if position is None:
@@ -852,7 +1000,7 @@ def targetcontrol():
                 continue 
 
             if position[0] < imageMid - leftmargin or position[0] > imageMid + rightmargin:
-                control.Rotate((position[0] + leftmargin - imageMid) * rotatemult, rotatespeed)
+                control.Rotate((position[0] + (rightmargin - leftmargin) - imageMid) * rotatemult, rotatespeed)
             else:
                 control.StopRotate()
 
@@ -870,50 +1018,27 @@ def targetcontrol():
                 control.StopArmHorizontal()
 
             #TODO: change this to specificly check for strawberry size and not tagret size
-            if position[2] >= grabsize - grabsizemargin and position[2] <= grabsize + grabsizemargin:
+            if position[2] >= grabsize - grabsizemargin and position[2] <= grabsize + grabsizemargin and not prikken:
                 prikken = True
                 print("prikken!")
 
-            robot.step(timestep)
-        if lockId == -1:
-            continue
-
-        #precise movement to stay with strawberry
-        godown = True
-
-        while prikken:
-            position = getposition(lockId)
-             
-            if position[0] < imageMid - leftmargin or position[0] > imageMid + rightmargin:
-                control.Rotate((position[0] + leftmargin - imageMid) * rotatemult, rotatespeed)
-            else:
-                control.StopRotate()
-
-            if position[1] < imageMid + yoffset - vertoffset:
-                #omlaag
-                if control.GetArmHorizontal() < control.vertdist:
-                    control.StopArmHorizontal()
-                control.ArmHorizontal((position[1] - imageMid + yoffset) * verticalDistMult, vertspeed)
-            elif position[1] > imageMid + yoffset + vertoffset:
-                #omhoog
-                if control.GetArmHorizontal() > control.vertdist:
-                    control.StopArmHorizontal()
-                control.ArmHorizontal((position[1] + vertoffset - imageMid + yoffset) * verticalDistMult, vertspeed)
-            else:
-                control.StopArmHorizontal()
-
-            if control.GetArmHorizontal() >= armmax and control.GetRotation() <= 0:
-                print("arm max reached, stopping")
-                prikken = False
-                continue
-
-            if control.clawrotpos == control.GetClawVertical():
+            if control.clawrotpos == control.GetClawVertical() and prikken:
                 if godown:
                     control.RotateClawVertical(-clawWiggleDist, 10)
                 else:
                     control.RotateClawVertical(clawWiggleDist, 10)
                 godown = not godown
+
+            if control.GetArmHorizontal() >= armmax and control.GetRotation() <= 0:
+                print("arm max reached, stopping")
+                Looping = False
+                continue
+
             robot.step(timestep)
+
+        if lockId == -1:
+            continue
+        
         
         print("returning to start position")
         control.StopClawVertical()

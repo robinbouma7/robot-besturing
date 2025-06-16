@@ -188,17 +188,23 @@ def RotateClawVertical(Rad, speed=1):
     """
     Rotates the claw by a given angle
     """
+    global clawrotpos, clawrot, vertdist
     limit = 1.57
     unsafe1 = -0.08
     unsafe2 = -0.05
-    if GetArmVertical() <= unsafe2 or clawrotpos <= unsafe2:
-        if GetArmVertical() <= unsafe1 or clawrotpos <= unsafe1:
+    if GetArmVertical() <= unsafe2 or vertdist <= unsafe2:
+        if GetArmVertical() <= unsafe1 or vertdist <= unsafe1:
             limit = 1
         else:
             limit = 0.4
 
-    global clawrotpos, clawrot
     clawrotpos += Rad
+    if clawrotpos > limit:
+        print("Claw vertical position is too high, setting to limit")
+        if clawrotpos > 0:
+            clawrotpos = limit
+        else:
+            clawrotpos = -limit
     clawrot.setVelocity(speed)
     clawrot.setPosition(clawrotpos)
 
