@@ -96,9 +96,22 @@ def ArmVertical(Dist, speed=1):
     """
     Moves the arm vertically by a given distance in m
     """
-    #TODO: cant go too far down when the claw is rotated vertically
-    global vertdist, armvert
+    global vertdist, armvert, clawrotpos
+    limit = -0.1
+
+    tier1height = 0.4
+    tier2height = 1
+    if GetClawVertical() >= tier1height or clawrotpos >= tier1height:
+        limit = -0.08
+        if GetClawVertical() >= tier2height or clawrotpos >= tier2height:
+            limit = -0.05
+
     vertdist += Dist
+
+    if vertdist < limit:
+        print("Arm vertical distance is too low, setting to limit")
+        vertdist = limit
+
     armvert.setVelocity(speed)
     armvert.setPosition(vertdist)
 
@@ -131,8 +144,19 @@ def ArmHorizontal(Dist, speed=1):
     Moves the arm horizontally by a given distance in m
     """
     #TODO: mag niet te ver naar binnen als de claw gedraaid is
-    global hordist, armhor
+    #limit 70 degrees = 1.22 rad
+    global hordist, armhor, clawrotposhor
+    
+    limit = 0
+    unsafe = 1.22
+
+    if clawrotposhor >= unsafe or GetClawHorizontal() >= unsafe:
+        limit = 0.05
+
     hordist += Dist
+    if hordist < limit:
+        hordist = limit
+
     armhor.setVelocity(speed)
     armhor.setPosition(hordist)
 
@@ -164,6 +188,15 @@ def RotateClawVertical(Rad, speed=1):
     """
     Rotates the claw by a given angle
     """
+    limit = 1.57
+    unsafe1 = -0.08
+    unsafe2 = -0.05
+    if GetArmVertical() <= unsafe2 or clawrotpos <= unsafe2:
+        if GetArmVertical() <= unsafe1 or clawrotpos <= unsafe1:
+            limit = 1
+        else:
+            limit = 0.4
+
     global clawrotpos, clawrot
     clawrotpos += Rad
     clawrot.setVelocity(speed)
@@ -198,8 +231,24 @@ def RotateClawHorizontal(Rad, speed=1):
     Rotates the claw horizontally by a given angle
     """
     #TODO: mag niet als de arm volledig is ingetrokken
-    global clawrotposhor, clawrothor
+    # limit 70 degrees = 1.22 rad
+    global clawrotposhor, clawrothor, hordist
+    limit = 1.57
+    unsafe = 0.05
+
+    if GetArmHorizontal() < limit or hordist < limit:
+        limit = 1.22
+
+
     clawrotposhor += Rad
+
+    if clawrotposhor > limit or GetClawHorizontal() > limit:
+        print("Claw horizontal position is too high, setting to limit")
+        if clawrotposhor > 0:
+            clawrotposhor = limit
+        else:
+            clawrotposhor = -limit
+
     clawrothor.setVelocity(speed)
     clawrothor.setPosition(clawrotposhor)
 
